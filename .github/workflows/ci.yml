@@ -1,0 +1,106 @@
+---
+name: CI Build and Test
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  build-and-test:
+    name: Build and Test on Fedora ${{ matrix.fedora_version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        fedora_version: [41, 42]
+    container:
+      image: fedora:${{ matrix.fedora_version }}
+
+    steps:
+      - name: Install build dependencies
+        run: |
+          dnf -y install \
+            cmake \
+            gcc-c++ \
+            git \
+            libdnf5-devel \
+            snapper-devel \
+            boost-devel \
+            fmt-devel \
+            catch2-devel \
+            rpm-build \
+            rpmdevtools
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Fix Git ownership for container
+        run: git config --global --add safe.directory /__w/libdnf5-plugin-snapper/libdnf5-plugin-snapper
+
+      - name: Configure with CMake
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DENABLE_TESTS=ON
+
+      - name: Build plugin
+        run: cmake --build build -j$(nproc)
+
+      - name: Run tests
+        run: |
+          cd build
+          ctest --output-on-failure --verbose
+
+      - name: Install to temporary location
+        run: |
+          DESTDIR=$PWD/install-root cmake --install build
+
+      - name: Verify plugin installation
+        run: |
+          test -f install-root/usr/lib64/libdnf5/plugins/snapper.so
+          test -f install-root/etc/dnf/libdnf5-plugins/snapper.conf
+          echo "✓ Plugin files installed correctly"
+
+      - name: Build RPM package
+        run: |
+          # Setup rpmbuild tree
+          rpmdev-setuptree
+
+          # Copy spec file
+          cp libdnf5-plugin-snapper.spec ~/rpmbuild/SPECS/
+
+          # Create source tarball (simulate release tarball)
+          VERSION=$(grep "Version:" libdnf5-plugin-snapper.spec | awk '{print $2}')
+          git archive --format=tar.gz \
+            --prefix=libdnf5-plugin-snapper-${VERSION}/ \
+            HEAD > ~/rpmbuild/SOURCES/libdnf5-plugin-snapper-${VERSION}.tar.gz
+
+          # Build RPM
+          rpmbuild -ba ~/rpmbuild/SPECS/libdnf5-plugin-snapper.spec
+
+      - name: Verify RPM contents
+        run: |
+          rpm -qpl ~/rpmbuild/RPMS/x86_64/libdnf5-plugin-snapper-*.rpm
+          echo "✓ RPM package built successfully"
+
+      - name: Upload RPM packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: rpm-fedora-${{ matrix.fedora_version }}
+          path: ~/rpmbuild/RPMS/x86_64/libdnf5-plugin-snapper-*.rpm
+          retention-days: 30
+          compression-level: 0
+
+      - name: Upload SRPM package
+        uses: actions/upload-artifact@v4
+        with:
+          name: srpm-fedora-${{ matrix.fedora_version }}
+          path: ~/rpmbuild/SRPMS/libdnf5-plugin-snapper-*.src.rpm
+          retention-days: 30
+          compression-level: 0

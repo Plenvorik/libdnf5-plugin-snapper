@@ -1,0 +1,49 @@
+# Build directories
+build/
+_build/
+cmake-build-*/
+
+# CMake files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+CTestTestfile.cmake
+Testing/
+
+# Compiled files
+*.so
+*.o
+*.a
+
+# RPM build
+*.rpm
+*.src.rpm
+rpmbuild/
+SRPMS/
+RPMS/
+BUILD/
+BUILDROOT/
+SOURCES/
+SPECS/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Documentation build
+docs/_build/
+
+# Reference documentation (not part of our project)
+docs/
+
+# Test artifacts
+test-results/
+*.log
+
+# Development documentation (local only)
+CLAUDE.md

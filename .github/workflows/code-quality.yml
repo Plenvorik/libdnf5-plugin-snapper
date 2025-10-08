@@ -1,0 +1,194 @@
+---
+name: Code Quality Checks
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  clang-format-check:
+    name: Check C++ Code Formatting
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:latest
+
+    steps:
+      - name: Install clang-format
+        run: |
+          dnf -y install \
+            clang-tools-extra \
+            git \
+            diffutils
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check code formatting
+        run: |
+          echo "Checking C++ code formatting..."
+
+          # Find all C++ source files
+          SOURCES=$(find src -name "*.cpp" -o -name "*.hpp" -o -name "*.h")
+
+          # Check formatting
+          FORMAT_ERRORS=0
+          for file in $SOURCES; do
+            echo "Checking: $file"
+            if ! clang-format --dry-run --Werror "$file" 2>&1; then
+              echo "❌ Formatting issues in: $file"
+              echo "   Run: clang-format -i $file"
+              FORMAT_ERRORS=1
+            fi
+          done
+
+          if [ $FORMAT_ERRORS -eq 1 ]; then
+            echo ""
+            echo "================================"
+            echo "Code formatting check FAILED"
+            echo "================================"
+            echo ""
+            echo "To fix formatting issues, run:"
+            echo "  find src -name '*.cpp' -o -name '*.hpp' | xargs clang-format -i"
+            echo ""
+            exit 1
+          fi
+
+          echo "✓ All files are properly formatted"
+
+  cmake-lint:
+    name: Check CMakeLists.txt
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Basic CMakeLists.txt validation
+        run: |
+          echo "Validating CMakeLists.txt..."
+
+          # Check for common issues
+          if grep -q "CMAKE_SOURCE_DIR" CMakeLists.txt; then
+            echo "⚠️  Warning: Using CMAKE_SOURCE_DIR (prefer CMAKE_CURRENT_SOURCE_DIR)"
+          fi
+
+          if ! grep -q "cmake_minimum_required" CMakeLists.txt; then
+            echo "❌ Error: Missing cmake_minimum_required()"
+            exit 1
+          fi
+
+          if ! grep -q "project(" CMakeLists.txt; then
+            echo "❌ Error: Missing project() declaration"
+            exit 1
+          fi
+
+          echo "✓ CMakeLists.txt basic validation passed"
+
+  spec-file-check:
+    name: Validate RPM Spec File
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:latest
+
+    steps:
+      - name: Install rpmlint
+        run: dnf -y install rpmlint git
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run rpmlint on spec file
+        run: |
+          echo "Running rpmlint on spec file..."
+
+          # Run rpmlint (allow some warnings)
+          rpmlint libdnf5-plugin-snapper.spec || true
+
+          echo ""
+          echo "✓ Spec file validation complete"
+
+      - name: Check spec file consistency
+        run: |
+          echo "Checking spec file consistency..."
+
+          # Extract version from spec
+          SPEC_VERSION=$(grep "^Version:" libdnf5-plugin-snapper.spec | awk '{print $2}')
+
+          # Extract version from CMakeLists.txt (from project() line)
+          CMAKE_VERSION=$(grep -A1 "^project(" CMakeLists.txt | grep "VERSION" | grep -oP '[0-9]+\.[0-9]+\.[0-9]+')
+
+          echo "Spec version: ${SPEC_VERSION}"
+          echo "CMake version: ${CMAKE_VERSION}"
+
+          if [ "${SPEC_VERSION}" != "${CMAKE_VERSION}" ]; then
+            echo "❌ Version mismatch between spec file and CMakeLists.txt"
+            exit 1
+          fi
+
+          echo "✓ Version consistency verified"
+
+  markdown-lint:
+    name: Check Markdown Documentation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check markdown files exist
+        run: |
+          echo "Checking required documentation files..."
+
+          REQUIRED_FILES="README.md CHANGELOG.md COPYING"
+          MISSING=0
+
+          for file in $REQUIRED_FILES; do
+            if [ ! -f "$file" ]; then
+              echo "❌ Missing required file: $file"
+              MISSING=1
+            else
+              echo "✓ Found: $file"
+            fi
+          done
+
+          if [ $MISSING -eq 1 ]; then
+            exit 1
+          fi
+
+          echo "✓ All required documentation files present"
+
+      - name: Check for trailing whitespace
+        run: |
+          echo "Checking for trailing whitespace in markdown files..."
+
+          if grep -n ' $' *.md; then
+            echo "❌ Found trailing whitespace (see above)"
+            exit 1
+          fi
+
+          echo "✓ No trailing whitespace found"
+
+  summary:
+    name: Quality Check Summary
+    runs-on: ubuntu-latest
+    needs: [clang-format-check, cmake-lint, spec-file-check, markdown-lint]
+    if: always()
+
+    steps:
+      - name: Check results
+        run: |
+          if [ "${{ needs.clang-format-check.result }}" != "success" ] || \
+             [ "${{ needs.cmake-lint.result }}" != "success" ] || \
+             [ "${{ needs.spec-file-check.result }}" != "success" ] || \
+             [ "${{ needs.markdown-lint.result }}" != "success" ]; then
+            echo "❌ Some quality checks failed"
+            exit 1
+          fi
+
+          echo "✓ All code quality checks passed"
