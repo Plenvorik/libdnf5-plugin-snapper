@@ -1,5 +1,5 @@
 Name:           libdnf5-plugin-snapper
-Version:        1.0.1
+Version:        1.0.2
 Release:        1%{?dist}
 Summary:        Snapper plugin for DNF5 - automatic filesystem snapshots
 
@@ -59,6 +59,10 @@ Features:
 %{_libdir}/libdnf5/plugins/snapper.so
 
 %changelog
+* Wed Nov 26 2025 Andre Herrlich <plenvorik@gmail.com> - 1.0.2-1
+- Add Fedora 43 support
+- Update CI workflow for Fedora 43
+
 * Wed Oct 08 2025 Andre Herrlich <plenvorik@gmail.com> - 1.0.1-1
 - Code cleanup and fix snapshot read-only behavior
 

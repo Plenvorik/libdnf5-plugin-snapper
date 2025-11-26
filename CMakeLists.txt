@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.18)
 
 # Project Definition
 project(libdnf5-plugin-snapper
-    VERSION 1.0.1
+    VERSION 1.0.2
     DESCRIPTION "Snapper plugin for DNF5 - automatic filesystem snapshots"
     LANGUAGES CXX)
 

@@ -24,7 +24,7 @@
 namespace {
 
 constexpr const char * PLUGIN_NAME = "snapper";
-constexpr libdnf5::plugin::Version PLUGIN_VERSION{.major = 1, .minor = 0, .micro = 1};
+constexpr libdnf5::plugin::Version PLUGIN_VERSION{.major = 1, .minor = 0, .micro = 2};
 constexpr libdnf5::PluginAPIVersion REQUIRED_PLUGIN_API_VERSION{.major = 2, .minor = 1};
 
 constexpr const char * attrs[]{"author.name", "author.email", "description", nullptr};

@@ -2,6 +2,12 @@
 
 All notable changes to libdnf5-plugin-snapper will be documented in this file.
 
+## [1.0.2] - 2025-11-26
+
+### Added
+- Fedora 43 support
+- Fedora 43 added to CI workflow matrix
+
 ## [1.0.1] - 2025-10-08
 
 ### Changed
@@ -46,4 +52,5 @@ All notable changes to libdnf5-plugin-snapper will be documented in this file.
 
 ---
 
+[1.0.2]: https://github.com/plenvorik/libdnf5-plugin-snapper/releases/tag/v1.0.2
 [1.0.1]: https://github.com/plenvorik/libdnf5-plugin-snapper/releases/tag/v1.0.1

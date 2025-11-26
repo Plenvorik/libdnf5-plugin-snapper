@@ -111,7 +111,7 @@ cd build && ctest --verbose
 
 ## Requirements
 
-- **Fedora 41+** or compatible distribution with DNF5
+- **Fedora 41-43** or compatible distribution with DNF5
 - **Snapper >= 0.10** with configured snapshot configuration
 - **Btrfs filesystem** (or other filesystem supported by Snapper)
 
