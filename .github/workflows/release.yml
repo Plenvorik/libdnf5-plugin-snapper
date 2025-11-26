@@ -10,28 +10,20 @@ permissions:
   contents: write
 
 jobs:
-  create-release:
-    name: Create GitHub Release
+  # Job 1: Prepare source tarball, checksums, and changelog
+  prepare:
+    name: Prepare Release Assets
     runs-on: ubuntu-latest
     container:
-      image: fedora:latest
+      image: fedora:43
+
+    outputs:
+      version: ${{ steps.version.outputs.VERSION }}
+      tag: ${{ steps.version.outputs.TAG }}
 
     steps:
-      - name: Install build dependencies
-        run: |
-          dnf -y install \
-            cmake \
-            gcc-c++ \
-            git \
-            libdnf5-devel \
-            snapper-devel \
-            boost-devel \
-            fmt-devel \
-            catch2-devel \
-            rpm-build \
-            rpmdevtools \
-            tar \
-            gzip
+      - name: Install dependencies
+        run: dnf -y install git tar gzip
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -57,60 +49,27 @@ jobs:
             echo "ERROR: Spec version (${SPEC_VERSION}) does not match tag (${TAG_VERSION})"
             exit 1
           fi
-          echo "✓ Version consistency verified"
+          echo "Version consistency verified: ${SPEC_VERSION}"
 
       - name: Create source tarball
-        id: tarball
         run: |
           VERSION=${{ steps.version.outputs.VERSION }}
           TARBALL="libdnf5-plugin-snapper-${VERSION}.tar.gz"
 
-          # Create tarball from git archive (matches spec Source0)
           git archive --format=tar.gz \
             --prefix=libdnf5-plugin-snapper-${VERSION}/ \
             ${{ steps.version.outputs.TAG }} > ${TARBALL}
 
-          echo "TARBALL=${TARBALL}" >> $GITHUB_OUTPUT
-          echo "✓ Created source tarball: ${TARBALL}"
+          echo "Created source tarball: ${TARBALL}"
 
           # Calculate checksums
           sha256sum ${TARBALL} > ${TARBALL}.sha256
           md5sum ${TARBALL} > ${TARBALL}.md5
 
-      - name: Build RPM and SRPM packages
-        run: |
-          VERSION=${{ steps.version.outputs.VERSION }}
-
-          # Setup rpmbuild tree
-          rpmdev-setuptree
-
-          # Copy spec and sources
-          cp libdnf5-plugin-snapper.spec ~/rpmbuild/SPECS/
-          cp libdnf5-plugin-snapper-${VERSION}.tar.gz ~/rpmbuild/SOURCES/
-
-          # Build source RPM
-          rpmbuild -bs ~/rpmbuild/SPECS/libdnf5-plugin-snapper.spec
-
-          # Build binary RPM
-          rpmbuild -bb ~/rpmbuild/SPECS/libdnf5-plugin-snapper.spec
-
-          # Copy RPMs to workspace for easier access
-          mkdir -p ./rpms ./srpms
-          cp ~/rpmbuild/RPMS/x86_64/*.rpm ./rpms/
-          cp ~/rpmbuild/SRPMS/*.rpm ./srpms/
-
-          # List built packages
-          echo "Built packages:"
-          ls -lh ./rpms/
-          ls -lh ./srpms/
-
       - name: Extract changelog for this release
-        id: changelog
         run: |
           VERSION=${{ steps.version.outputs.VERSION }}
 
-          # Extract changelog entry for this version from CHANGELOG.md
-          # Between ## [VERSION] and next ## [ or end of file
           awk -v version="${VERSION}" '
             BEGIN { found=0; print_content=0 }
             /^## \[/ {
@@ -124,31 +83,146 @@ jobs:
             found && print_content && !/^## \[/ { print }
           ' CHANGELOG.md > release-notes.txt
 
-          # Show what we extracted
           echo "Release notes:"
           cat release-notes.txt
+
+      - name: Upload source artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-tarball
+          path: |
+            libdnf5-plugin-snapper-${{ steps.version.outputs.VERSION }}.tar.gz
+            libdnf5-plugin-snapper-${{ steps.version.outputs.VERSION }}.tar.gz.sha256
+            libdnf5-plugin-snapper-${{ steps.version.outputs.VERSION }}.tar.gz.md5
+            release-notes.txt
+          retention-days: 1
+
+  # Job 2: Build RPMs for each Fedora version
+  build-rpms:
+    name: Build RPMs for Fedora ${{ matrix.fedora_version }}
+    runs-on: ubuntu-latest
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        fedora_version: [42, 43]
+    container:
+      image: fedora:${{ matrix.fedora_version }}
+
+    steps:
+      - name: Install build dependencies
+        run: |
+          dnf -y install \
+            cmake \
+            gcc-c++ \
+            git \
+            libdnf5-devel \
+            snapper-devel \
+            boost-devel \
+            fmt-devel \
+            catch2-devel \
+            rpm-build \
+            rpmdevtools
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure git safe directory
+        run: git config --global --add safe.directory /__w/libdnf5-plugin-snapper/libdnf5-plugin-snapper
+
+      - name: Download source tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: source-tarball
+
+      - name: Build RPM and SRPM packages
+        run: |
+          VERSION=${{ needs.prepare.outputs.version }}
+
+          # Setup rpmbuild tree
+          rpmdev-setuptree
+
+          # Copy spec and sources
+          cp libdnf5-plugin-snapper.spec ~/rpmbuild/SPECS/
+          cp libdnf5-plugin-snapper-${VERSION}.tar.gz ~/rpmbuild/SOURCES/
+
+          # Build both SRPM and binary RPM
+          rpmbuild -ba ~/rpmbuild/SPECS/libdnf5-plugin-snapper.spec
+
+          # List built packages
+          echo "Built packages:"
+          ls -lh ~/rpmbuild/RPMS/x86_64/
+          ls -lh ~/rpmbuild/SRPMS/
+
+      - name: Upload RPM packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: rpms-fc${{ matrix.fedora_version }}
+          path: ~/rpmbuild/RPMS/x86_64/libdnf5-plugin-snapper*.rpm
+          retention-days: 1
+
+      - name: Upload SRPM package
+        uses: actions/upload-artifact@v4
+        with:
+          name: srpm-fc${{ matrix.fedora_version }}
+          path: ~/rpmbuild/SRPMS/libdnf5-plugin-snapper*.src.rpm
+          retention-days: 1
+
+  # Job 3: Create GitHub Release with all artifacts
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [prepare, build-rpms]
+
+    steps:
+      - name: Download source tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: source-tarball
+          path: artifacts/
+
+      - name: Download FC42 RPMs
+        uses: actions/download-artifact@v4
+        with:
+          name: rpms-fc42
+          path: artifacts/
+
+      - name: Download FC42 SRPM
+        uses: actions/download-artifact@v4
+        with:
+          name: srpm-fc42
+          path: artifacts/
+
+      - name: Download FC43 RPMs
+        uses: actions/download-artifact@v4
+        with:
+          name: rpms-fc43
+          path: artifacts/
+
+      - name: Download FC43 SRPM
+        uses: actions/download-artifact@v4
+        with:
+          name: srpm-fc43
+          path: artifacts/
+
+      - name: List all artifacts
+        run: |
+          echo "Release artifacts:"
+          ls -lh artifacts/
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            libdnf5-plugin-snapper-${{ steps.version.outputs.VERSION }}.tar.gz
-            libdnf5-plugin-snapper-${{ steps.version.outputs.VERSION }}.tar.gz.sha256
-            libdnf5-plugin-snapper-${{ steps.version.outputs.VERSION }}.tar.gz.md5
-            rpms/*.rpm
-            srpms/*.rpm
-          body_path: release-notes.txt
+          files: artifacts/*
+          body_path: artifacts/release-notes.txt
           draft: false
           prerelease: false
-          name: Release ${{ steps.version.outputs.TAG }}
+          name: Release ${{ needs.prepare.outputs.tag }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Release summary
         run: |
-          echo "✓ Release ${{ steps.version.outputs.TAG }} created successfully"
+          echo "Release ${{ needs.prepare.outputs.tag }} created successfully"
           echo ""
           echo "Artifacts:"
-          echo "  - Source tarball: libdnf5-plugin-snapper-${{ steps.version.outputs.VERSION }}.tar.gz"
-          echo "  - Binary RPM: libdnf5-plugin-snapper-${{ steps.version.outputs.VERSION }}-*.rpm"
-          echo "  - Source RPM: libdnf5-plugin-snapper-${{ steps.version.outputs.VERSION }}-*.src.rpm"
-          echo "  - Checksums: SHA256 and MD5"
+          ls -1 artifacts/
