@@ -5,7 +5,7 @@ Summary:        Snapper plugin for DNF5 - automatic filesystem snapshots
 
 License:        LGPL-2.1-or-later
 URL:            https://github.com/plenvorik/libdnf5-plugin-snapper
-Source0:        %{url}/archive/%{version}/%{name}-%{version}.tar.gz
+Source0:        %{url}/archive/v%{version}/%{name}-%{version}.tar.gz
 
 BuildRequires:  cmake >= 3.18
 BuildRequires:  gcc-c++
