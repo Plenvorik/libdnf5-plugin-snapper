@@ -1,11 +1,11 @@
 Name:           libdnf5-plugin-snapper
-Version:        1.0.2
+Version:        1.0.3
 Release:        1%{?dist}
 Summary:        Snapper plugin for DNF5 - automatic filesystem snapshots
 
 License:        LGPL-2.1-or-later
 URL:            https://github.com/plenvorik/libdnf5-plugin-snapper
-Source0:        %{url}/archive/%{version}/%{name}-%{version}.tar.gz
+Source0:        %{url}/archive/v%{version}/%{name}-%{version}.tar.gz
 
 BuildRequires:  cmake >= 3.18
 BuildRequires:  gcc-c++
@@ -17,7 +17,6 @@ BuildRequires:  catch2-devel
 
 Requires:       libdnf5%{?_isa} >= 5.0
 Requires:       snapper-libs%{?_isa} >= 0.10
-Requires:       dnf5
 
 # Suggests the old plugin should be removed if installed
 Obsoletes:      python3-dnf-plugin-snapper < 5.0
@@ -54,7 +53,6 @@ Features:
 %license COPYING
 %doc README.md
 %doc CHANGELOG.md
-%dir %{_sysconfdir}/dnf/libdnf5-plugins
 %config(noreplace) %{_sysconfdir}/dnf/libdnf5-plugins/snapper.conf
 %{_libdir}/libdnf5/plugins/snapper.so
 

@@ -2,6 +2,11 @@
 
 All notable changes to libdnf5-plugin-snapper will be documented in this file.
 
+## [1.0.3] - 2026-07-05
+
+### Added
+- Fedora 44
+
 ## [1.0.2] - 2025-11-26
 
 ### Added
